@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GK Academy Challenge - KBL Edition</title>
+    <script src="//cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { background-color: #0f172a; font-family: 'Poppins', sans-serif; }
+        .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-primary { background: #f59e0b; color: #1e293b; font-weight: bold; transition: all 0.2s; }
+        .btn-primary:hover:not(:disabled) { background: #fbbf24; }
+        .btn-primary:disabled { background: #4b5563; color: #94a3b8; cursor: not-allowed; }
+        .btn-secondary { background: #334155; }
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* KBC Styles */
+        :root {
+            --kbc-bg: #020024; --kbc-purple: #0f0c4b; --kbc-blue: #000046; --border-yellow: #ffd700;
+            --text-light: #f0f0f0; --text-dark: #333; --prize-active: #ff9900; --prize-won: #a9a9a9;
+            --correct-ans: #28a745; --incorrect-ans: #dc3545; --lock-ans: #ffc107;
+        }
+        body.kbc-active { background: radial-gradient(circle, var(--kbc-purple) 0%, var(--kbc-bg) 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        
+        /* Mobile-First Styles (Applied Directly) */
+        .kbc-container { 
+            width: 100%; 
+            background: rgba(0, 0, 0, 0.2); 
+            display: flex; 
+            overflow: hidden; 
+            position: relative; 
+            flex-direction: column; 
+            height: auto; 
+            min-height: 100vh; 
+            border-radius: 0; 
+            border: none; 
+            max-height: none; 
+        }
+        .left-panel, .right-panel { 
+            width: 100%; 
+            padding: 15px; 
+            box-sizing: border-box; 
+        }
+        .left-panel { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            border-right: none; 
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1); 
+        }
+        .right-panel { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+
+        .prize-money-title { font-size: 1.5em; font-weight: 700; margin-bottom: 20px; color: var(--prize-active); }
+        .prize-list { 
+            list-style: none; 
+            padding: 0; 
+            margin: 0; 
+            width: 100%; 
+            text-align: center; 
+            display: flex;
+            flex-direction: row; 
+            overflow-x: auto; 
+            padding-bottom: 10px; 
+        }
+        .prize-list li { 
+            padding: 10px 5px; 
+            margin: 0 5px; 
+            border-radius: 8px; 
+            background: rgba(255, 255, 255, 0.05); 
+            transition: all 0.3s ease; 
+            font-weight: 600; 
+            font-size: 0.8em; 
+            color: var(--prize-won); 
+            flex-shrink: 0; 
+            writing-mode: vertical-rl; 
+            text-orientation: mixed; 
+        }
+        .prize-list li.active { background: var(--prize-active); color: var(--text-dark); transform: scale(1.1); box-shadow: 0 0 15px var(--prize-active); }
+        .prize-list li.safe-haven { color: var(--prize-active); font-weight: 700; border: 1px solid rgba(255, 215, 0, 0.5); }
+        .prize-list li span { float: left; margin-right: 10px;}
+        
+        .lifelines-container { 
+            width: 100%; 
+            display: flex; 
+            justify-content: center; 
+            gap: 10px; 
+            align-items: center; 
+            position: relative; 
+        }
+        .lifeline-btn { 
+            background: var(--kbc-blue); 
+            border: 2px solid var(--border-yellow); 
+            color: var(--text-light); 
+            border-radius: 50%; 
+            width: 55px; 
+            height: 55px; 
+            cursor: pointer; 
+            font-size: 1em; 
+            font-weight: 700; 
+            transition: all 0.3s ease; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            text-align: center; 
+            padding: 5px; 
+            position: relative; 
+        }
+        .lifeline-btn .count { 
+            position: absolute; 
+            top: -2px; 
+            right: -2px; 
+            background: var(--incorrect-ans); 
+            color: white; 
+            border-radius: 50%; 
+            width: 20px; 
+            height: 20px; 
+            font-size: 0.7em; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            border: 1px solid white; 
+            font-weight: bold; 
+        }
+        .lifeline-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .timer-display { cursor: default; font-size: 1.5em; font-weight: 700; }
+        
+        .question-container { 
+            width: 100%; 
+            height: auto; 
+            min-height: 100px;
+            margin-bottom: 25px; 
+        }
+        .hexagon { background-color: var(--border-yellow); clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0% 50%); display: flex; align-items: center; justify-content: center; }
+        .hexagon-inner { background-color: var(--kbc-blue); clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0% 50%); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+        
+        .question-text-wrapper { 
+            font-size: 1.1em; 
+            font-weight: 600; 
+            text-align: center; 
+            padding: 0 15px; 
+        }
+        .options-container { 
+            width: 100%; 
+            display: grid; 
+            grid-template-columns: 1fr; 
+            gap: 15px; 
+            min-height: auto; 
+        }
+        .option-btn { background: transparent; border: none; padding: 0; cursor: pointer; font-family: 'Poppins', sans-serif; color: var(--text-light); }
+        .option-prefix { color: var(--prize-active); font-weight: 700; margin-right: 15px; }
+        .option-btn.locked .hexagon-inner { background-color: var(--lock-ans); color: var(--text-dark); }
+        .option-btn.correct .hexagon-inner { background-color: var(--correct-ans); }
+        .option-btn.incorrect .hexagon-inner { background-color: var(--incorrect-ans); }
+        .loader { border: 5px solid rgba(255,255,255,0.2); border-top: 5px solid var(--border-yellow); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+    </style>
+</head>
+<body class="text-white p-4">
+    <div id="app-container" class="max-w-md mx-auto">
+        <header id="main-header" class="flex justify-between items-center mb-4 p-4 glass-card rounded-lg">
+            <div>
+                <h1 class="text-xl font-bold text-amber-400">GK Academy</h1>
+                <p id="user-greeting" class="text-sm text-slate-300">Welcome!</p>
+            </div>
+            <div id="auth-section">
+                <button id="login-btn" class="btn-primary px-4 py-2 rounded-lg text-sm">Sign In</button>
+                <div id="user-info" class="hidden items-center gap-2">
+                    <button id="store-btn" class="btn-secondary p-2 rounded-full text-xs">Store</button>
+                    <button id="profile-btn"><img id="user-pic" class="w-10 h-10 rounded-full border-2 border-amber-400" src=""></button>
+                    <button id="logout-btn" class="btn-secondary p-2 rounded-full text-xs">Logout</button>
+                </div>
+            </div>
+        </header>
+        <main>
+            <div id="lobby-screen" class="screen active">
+                <h2 class="text-lg font-bold mb-2 text-amber-400">Daily Challenge</h2>
+                <div id="tournaments-list" class="space-y-3"><p class="text-slate-400">Loading...</p></div>
+            </div>
+            <div id="game-screen" class="screen">
+                <div class="kbc-container">
+                    <div class="left-panel">
+                        <h2 class="prize-money-title">KBL By GK</h2>
+                        <ol class="prize-list" id="prize-list"></ol>
+                    </div>
+                    <div class="right-panel">
+                        <div class="lifelines-container">
+                            <button class="lifeline-btn" id="lifeline-5050" title="50:50">
+                                50:50
+                                <span class="count" id="lifeline-5050-count">0</span>
+                            </button>
+                            <div class="lifeline-btn timer-display" id="timer-display">...</div>
+                        </div>
+                        <div class="main-content">
+                            <div class="question-container"><div class="hexagon"><div class="hexagon-inner"><div id="question-text-wrapper" class="question-text-wrapper"><div id="loader" class="loader"></div><p id="question-text" style="display: none;"></p></div></div></div></div>
+                            <div class="options-container" id="options-container"></div>
+                        </div>
+                        <div class="action-buttons">
+                                <button id="play-again-btn" class="w-full btn-secondary mt-6 py-2 rounded-lg" style="display: none;">Back to Lobby</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="profile-screen" class="screen">
+                <div class="p-4 glass-card rounded-lg">
+                    <div class="text-center border-b border-slate-600 pb-4">
+                        <img id="profile-pic-large" class="w-24 h-24 rounded-full mx-auto border-4 border-amber-400" src="">
+                        <h2 id="profile-name" class="text-2xl font-bold mt-2"></h2>
+                        <p id="profile-email" class="text-sm text-slate-400"></p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-center mt-4">
+                        <div> <p class="text-slate-400">High Score</p> <p id="profile-highscore" class="text-2xl font-bold">0</p> </div>
+                        <div> <p class="text-slate-400">Coins Wallet</p> <p id="profile-coins" class="text-2xl font-bold text-amber-400">0</p> </div>
+                    </div>
+                    <div class="mt-6 border-t border-slate-600 pt-4">
+                        <h3 class="font-bold text-amber-400 mb-2">Redeem Coins to UPI</h3>
+                        <div class="space-y-3">
+                            <p class="text-sm text-slate-400">100 Coins = ₹1. Minimum 1000 coins to redeem.</p>
+                            <input type="text" id="upi-id-input" placeholder="Enter Your UPI ID" class="w-full bg-slate-700 text-white p-2 rounded-lg border border-slate-500 focus:outline-none focus:border-amber-400">
+                            <button id="redeem-upi-btn" class="w-full btn-primary px-4 py-2 rounded-lg text-sm">Redeem 1000 Coins (₹10)</button>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <h3 class="font-bold text-amber-400 mb-2">Transaction History</h3>
+                        <ul id="transaction-history" class="space-y-2 text-sm max-h-40 overflow-y-auto"></ul>
+                    </div>
+                    <button onclick="showScreen('lobby-screen')" class="w-full btn-secondary mt-6 py-2 rounded-lg">Back to Lobby</button>
+                </div>
+            </div>
+            <div id="store-screen" class="screen">
+                <div class="p-4 glass-card rounded-lg">
+                    <h2 class="text-lg font-bold mb-4 text-amber-400">Lifeline Store</h2>
+                    <div class="space-y-3">
+                        <div class="p-3 glass-card rounded-lg flex justify-between items-center">
+                            <div>
+                                <p class="font-bold">5 x "50:50" Lifelines</p>
+                                <p class="text-sm text-slate-400">Buy a pack of five 50:50 lifelines.</p>
+                            </div>
+                            <button id="buy-lifeline-pack-btn" class="btn-primary px-4 py-2 rounded-lg text-sm">Buy for ₹10</button>
+                        </div>
+                    </div>
+                     <button onclick="showScreen('lobby-screen')" class="w-full btn-secondary mt-6 py-2 rounded-lg">Back to Lobby</button>
+                </div>
+            </div>
+        </main>
+    </div>
+<script>
+// ===================================================================
+// CONFIGURATION KEYS (IMPORTANT: Fill these with your own keys)
+// ===================================================================
+const firebaseConfig = {
+    apiKey: "AIzaSyDTpSO-VzHEObfaigP9SMvGQ3gDL8GFvus",
+    authDomain: "gk-academy-challenge.firebaseapp.com",
+    projectId: "gk-academy-challenge",
+    storageBucket: "gk-academy-challenge.firebasestorage.app",
+    messagingSenderId: "484965904494",
+    appId: "1:484965904494:web:4fc16108b710491076f67f",
+    measurementId: "G-LJ43QCBRDN"
+};
+const GEMINI_API_KEY = "AIzaSyAoxCH_X1QNsflSO9Z9yxnJS0j9gC1JLKs";
+const RAZORPAY_KEY_ID = "rzp_test_RJU11zaDAZzXKs";
+// ===================================================================
+// APP INITIALIZATION
+// ===================================================================
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+// ===================================================================
+// DOM ELEMENT SELECTORS
+// ===================================================================
+const appContainer = document.getElementById('app-container');
+const mainHeader = document.getElementById('main-header');
+const userGreeting = document.getElementById('user-greeting');
+const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const userInfo = document.getElementById('user-info');
+const userPic = document.getElementById('user-pic');
+const profileBtn = document.getElementById('profile-btn');
+const storeBtn = document.getElementById('store-btn');
+const kblQuestionTextElement = document.getElementById('question-text'),
+    kblLoaderElement = document.getElementById('loader'),
+    kblOptionsContainer = document.getElementById('options-container'),
+    kblPrizeList = document.getElementById('prize-list'),
+    kblPlayAgainBtn = document.getElementById('play-again-btn'),
+    kblTimerDisplay = document.getElementById('timer-display'),
+    kblLifeline5050Btn = document.getElementById('lifeline-5050'),
+    kblLifeline5050Count = document.getElementById('lifeline-5050-count');
+// ===================================================================
+// GLOBAL APP STATE
+// ===================================================================
+let currentUser = null;
+let kblCurrentLifelines = { '50-50': 0 };
+let kblUsedLifelineThisQuestion = false;
+let kblCurrentQuestionIndex = 0;
+let kblGameActive = true;
+let kblCurrentQuestionData = null;
+let kblTimerInterval = null;
+const KBL_TIMER_DURATION = 30;
+const KBL_PRIZE_LEVELS = 15;
+// ===================================================================
+// CORE APP FUNCTIONS (Auth, Navigation, Profile)
+// ===================================================================
+function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+    if (screenId === 'game-screen') {
+        document.body.classList.add('kbc-active');
+        mainHeader.style.display = 'none';
+        appContainer.classList.remove('max-w-md', 'mx-auto');
+    } else {
+        document.body.classList.remove('kbc-active');
+        mainHeader.style.display = 'flex';
+        appContainer.classList.add('max-w-md', 'mx-auto');
+    }
+}
+auth.onAuthStateChanged(user => {
+    if (user) {
+        currentUser = user;
+        loginBtn.classList.add('hidden');
+        userInfo.classList.remove('hidden');
+        userPic.src = user.photoURL || 'https://i.pravatar.cc/40';
+        userGreeting.textContent = `Hello, ${user.displayName.split(' ')[0]}!`;
+        setupUser(user);
+    } else {
+        currentUser = null;
+        loginBtn.classList.remove('hidden');
+        userInfo.classList.add('hidden');
+        userGreeting.textContent = 'Welcome! Please sign in.';
+        document.getElementById('tournaments-list').innerHTML = `<p class="text-slate-400">Please sign in to view tournaments.</p>`;
+    }
+});
+function setupUser(user) {
+    const userRef = db.collection('users').doc(user.uid);
+    userRef.onSnapshot(doc => {
+        if (!doc.exists) {
+            userRef.set({ 
+                name: user.displayName, 
+                email: user.email, 
+                highScore: 0, 
+                coins: 100, // Welcome bonus
+                lifelines: { '50-50': 3 } // Starting lifelines
+            });
+        }
+        const data = doc.data();
+        if (data && data.lifelines) {
+            kblCurrentLifelines = data.lifelines;
+        }
+    });
+    loadTournaments();
+}
+function showProfile() {
+    if (!currentUser) return;
+    const userRef = db.collection('users').doc(currentUser.uid);
+    userRef.get().then(doc => {
+        if (doc.exists) {
+            const data = doc.data();
+            document.getElementById('profile-pic-large').src = currentUser.photoURL || 'https://i.pravatar.cc/96';
+            document.getElementById('profile-name').textContent = data.name;
+            document.getElementById('profile-email').textContent = data.email;
+            document.getElementById('profile-highscore').textContent = data.highScore || 0;
+            document.getElementById('profile-coins').textContent = data.coins || 0;
+        }
+    });
+    const historyList = document.getElementById('transaction-history');
+    historyList.innerHTML = '<li>Loading...</li>';
+    db.collection('users').doc(currentUser.uid).collection('transactions')
+        .orderBy('timestamp', 'desc').limit(10).onSnapshot(snapshot => {
+            historyList.innerHTML = '';
+            if (snapshot.empty) {
+                historyList.innerHTML = '<li class="text-slate-400">No transactions yet.</li>';
+                return;
+            }
+            snapshot.forEach(doc => {
+                const tx = doc.data();
+                const date = tx.timestamp.toDate().toLocaleDateString();
+                const li = document.createElement('li');
+                li.className = `flex justify-between p-2 rounded ${tx.type === 'credit' ? 'bg-green-900/50' : tx.type === 'debit' ? 'bg-red-900/50' : 'bg-blue-900/50'}`;
+                li.innerHTML = `<div><p>${tx.description}</p><p class="text-xs text-slate-400">${date}</p></div><p class="font-bold">${tx.type === 'credit' ? '+' : '-'}${tx.amount}</p>`;
+                historyList.appendChild(li);
+            });
+        });
+    showScreen('profile-screen');
+}
+function loadTournaments() {
+    const listEl = document.getElementById('tournaments-list');
+    listEl.innerHTML = `<div class="p-4 glass-card rounded-lg">
+            <h3 class="font-bold text-lg">Daily KBL Challenge</h3>
+            <p class="text-sm text-slate-300 mt-1">Play and win exciting coins!</p>
+            <button class="w-full mt-4 btn-primary px-4 py-2 rounded-lg text-sm start-game-btn">Play Now</button>
+        </div>`;
+}
+// ===================================================================
+// KBC GAME LOGIC
+// ===================================================================
+function kblSetupPrizeList() {
+    kblPrizeList.innerHTML = '';
+    for (let i = 0; i < KBL_PRIZE_LEVELS; i++) {
+        const li = document.createElement('li');
+        li.dataset.level = i;
+        if (i === 4 || i === 9) li.classList.add('safe-haven');
+        // The line below is changed to remove the number
+        li.innerHTML = ``; 
+        kblPrizeList.appendChild(li);
+    }
+}
+function kblUpdatePrizeList() {
+    const items = document.querySelectorAll('.prize-list li');
+    items.forEach((item, index) => {
+        item.classList.toggle('active', index === kblCurrentQuestionIndex);
+    });
+}
+function kblStartTimer() {
+    clearInterval(kblTimerInterval);
+    let timeLeft = KBL_TIMER_DURATION;
+    kblTimerDisplay.textContent = timeLeft;
+    kblTimerInterval = setInterval(() => {
+        timeLeft--;
+        kblTimerDisplay.textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(kblTimerInterval);
+            kblEndGame(false, 'Time Out');
+        }
+    }, 1000);
+}
+function kblResetUIForNewQuestion() {
+    kblOptionsContainer.innerHTML = '';
+    kblGameActive = false;
+    kblLoaderElement.style.display = 'block';
+    kblQuestionTextElement.style.display = 'none';
+    kblPlayAgainBtn.style.display = 'none';
+}
+async function kblFetchNewQuestion() {
+    const kblQuestionSchema = { type: "OBJECT", properties: { q: { type: "STRING" }, o: { type: "ARRAY", items: { type: "STRING" } }, a: { type: "STRING" } }, required: ["q", "o", "a"] };
+    const promptText = `Generate a new difficult General Knowledge question in Hindi for a KBC style game. Provide 4 options and the correct answer.`;
+    const payload = { contents: [{ parts: [{ text: promptText }] }], generationConfig: { responseMimeType: "application/json", responseSchema: kblQuestionSchema, temperature: 1.2 } };
+    
+    try {
+        const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!result.ok) throw new Error(`API Error: ${result.status}`);
+        const jsonResult = await result.json();
+        const dataText = jsonResult.candidates[0].content.parts[0].text.trim();
+        return JSON.parse(dataText);
+    } catch (error) {
+        console.error("Failed to fetch question:", error);
+        kblQuestionTextElement.textContent = "सवाल लोड नहीं हो सका। कृपया फिर से प्रयास करें।";
+        kblLoaderElement.style.display = 'none';
+        kblQuestionTextElement.style.display = 'block';
+        kblPlayAgainBtn.style.display = 'block';
+        return null;
+    }
+}
+async function kblShowQuestion() {
+    kblResetUIForNewQuestion();
+    kblUpdatePrizeList();
+    const data = await kblFetchNewQuestion();
+    if (!data || !data.q || !data.o || !data.a) {
+        kblEndGame(false, "Could not load a valid question.");
+        return;
+    }
+    kblCurrentQuestionData = data;
+    kblLoaderElement.style.display = 'none';
+    kblQuestionTextElement.textContent = data.q;
+    kblQuestionTextElement.style.display = 'block';
+    data.o.forEach((optionText, index) => {
+        const button = document.createElement('button');
+        button.className = 'option-btn';
+        button.innerHTML = `<div class="hexagon"><div class="hexagon-inner"><span class="option-prefix">${String.fromCharCode(65 + index)}:</span> <span>${optionText}</span></div></div>`;
+        button.onclick = () => kblSelectAnswer(button, optionText, data.a);
+        kblOptionsContainer.appendChild(button);
+    });
+    kblGameActive = true;
+    kblUsedLifelineThisQuestion = false;
+    kblLifeline5050Count.textContent = kblCurrentLifelines['50-50'] || 0;
+    kblLifeline5050Btn.disabled = (kblCurrentLifelines['50-50'] || 0) === 0;
+    kblStartTimer();
+}
+function kblSelectAnswer(buttonEl, selectedAnswer, correctAnswer) {
+    if (!kblGameActive) return;
+    kblGameActive = false;
+    clearInterval(kblTimerInterval);
+    document.querySelectorAll('.option-btn').forEach(b => { b.disabled = true; });
+    const isCorrect = selectedAnswer === correctAnswer;
+    buttonEl.classList.add(isCorrect ? 'correct' : 'incorrect');
+    setTimeout(() => {
+        if (isCorrect) {
+            kblCurrentQuestionIndex++;
+            if (kblCurrentQuestionIndex >= KBL_PRIZE_LEVELS) {
+                kblEndGame(true, 'Congratulations! You won the game!');
+            } else {
+                kblShowQuestion();
+            }
+        } else {
+            document.querySelectorAll('.option-btn').forEach(btn => {
+                if (btn.textContent.includes(correctAnswer)) {
+                    btn.classList.add('correct');
+                }
+            });
+            setTimeout(() => kblEndGame(false, 'Wrong Answer!'), 2000);
+        }
+    }, 1500);
+}
+async function kblEndGame(isWinner, message) {
+    clearInterval(kblTimerInterval);
+    kblGameActive = false;
+    let questionsAnsweredCorrectly = isWinner ? KBL_PRIZE_LEVELS : kblCurrentQuestionIndex;
+    let score = questionsAnsweredCorrectly * 10;
+    let coinsWon = questionsAnsweredCorrectly * 50;
+    
+    alert(`${message}\nYou answered ${questionsAnsweredCorrectly} questions and won ${coinsWon} coins!`);
+    if (currentUser && coinsWon > 0) {
+        const userRef = db.collection('users').doc(currentUser.uid);
+        try {
+            await db.runTransaction(async (t) => {
+                const doc = await t.get(userRef);
+                const data = doc.data();
+                const newHighScore = Math.max(data.highScore || 0, score);
+                t.update(userRef, {
+                    coins: firebase.firestore.FieldValue.increment(coinsWon),
+                    highScore: newHighScore
+                });
+                const txRef = userRef.collection('transactions').doc();
+                t.set(txRef, {
+                    amount: coinsWon, type: 'credit', description: `Won in KBL Quiz`,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+        } catch (e) {
+            console.error("Transaction failed: ", e);
+        }
+    }
+    kblPlayAgainBtn.style.display = 'block';
+}
+function startKBCGame() {
+    kblCurrentQuestionIndex = 0;
+    kblSetupPrizeList();
+    kblShowQuestion();
+}
+// ===================================================================
+// EVENT LISTENERS
+// ===================================================================
+loginBtn.addEventListener('click', () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()));
+logoutBtn.addEventListener('click', () => auth.signOut());
+profileBtn.addEventListener('click', () => showProfile());
+storeBtn.addEventListener('click', () => showScreen('store-screen'));
+kblPlayAgainBtn.addEventListener('click', () => showScreen('lobby-screen'));
+document.getElementById('buy-lifeline-pack-btn').addEventListener('click', () => {
+    if (!currentUser) return alert("Please sign in to make a purchase.");
+    const options = {
+        key: RAZORPAY_KEY_ID, amount: 1000, currency: "INR", name: "GK Academy Store",
+        description: "Pack of 5 '50:50' Lifelines",
+        handler: async () => {
+            alert("Payment successful! 5 lifelines have been added.");
+            const userRef = db.collection('users').doc(currentUser.uid);
+            await userRef.update({ 'lifelines.50-50': firebase.firestore.FieldValue.increment(5) });
+        },
+        prefill: { name: currentUser.displayName, email: currentUser.email }
+    };
+    new Razorpay(options).open();
+});
+document.addEventListener('click', e => {
+    if (e.target.classList.contains('start-game-btn')) {
+        if (!currentUser) { alert("Please sign in to play!"); return; }
+        showScreen('game-screen');
+        startKBCGame();
+    }
+});
+kblLifeline5050Btn.addEventListener('click', async () => {
+    if (kblUsedLifelineThisQuestion || !kblGameActive || (kblCurrentLifelines['50-50'] || 0) === 0) return;
+    
+    kblUsedLifelineThisQuestion = true;
+    kblLifeline5050Btn.disabled = true;
+    const userRef = db.collection('users').doc(currentUser.uid);
+    await userRef.update({ 'lifelines.50-50': firebase.firestore.FieldValue.increment(-1) });
+    const correctAnswer = kblCurrentQuestionData.a;
+    let incorrectOptions = [];
+    document.querySelectorAll('.option-btn').forEach(btn => {
+        if (!btn.textContent.includes(correctAnswer)) {
+            incorrectOptions.push(btn);
+        }
+    });
+    // Randomly remove incorrect options until only two are left to be hidden
+    while (incorrectOptions.length > 2) {
+        incorrectOptions.splice(Math.floor(Math.random() * incorrectOptions.length), 1);
+    }
+    
+    // Hide the remaining two incorrect options
+    incorrectOptions.forEach(btn => {
+        btn.style.visibility = 'hidden';
+    });
+});
+document.getElementById('redeem-upi-btn').addEventListener('click', async () => {
+    if (!currentUser) return alert("Please sign in.");
+    
+    const upiId = document.getElementById('upi-id-input').value.trim();
+    if (!upiId) {
+        return alert("Please enter your UPI ID.");
+    }
+    const cost = 1000;
+    const amountInINR = 10;
+    const item = `₹${amountInINR} via UPI`;
+    const redeemBtn = document.getElementById('redeem-upi-btn');
+    const userRef = db.collection('users').doc(currentUser.uid);
+    redeemBtn.disabled = true;
+    redeemBtn.textContent = 'Processing...';
+    try {
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(userRef);
+            const coins = doc.data().coins || 0;
+            if (coins < cost) {
+                throw "Not enough coins! You need at least 1000 coins.";
+            }
+            t.update(userRef, { coins: firebase.firestore.FieldValue.increment(-cost) });
+            const txRef = userRef.collection('transactions').doc();
+            t.set(txRef, { amount: cost, type: 'debit', description: `Redeemed ${item}`, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+            const redeemRef = db.collection('redemptionRequests').doc();
+            t.set(redeemRef, { 
+                userId: currentUser.uid, userName: currentUser.displayName, userEmail: currentUser.email, 
+                item: item, upiId: upiId, cost: cost, status: 'pending', 
+                requestedAt: firebase.firestore.FieldValue.serverTimestamp() 
+            });
+        });
+        alert(`Redemption request sent successfully! You will receive ₹${amountInINR} within 24-48 hours.`);
+        document.getElementById('upi-id-input').value = '';
+        showProfile();
+    } catch (err) {
+        alert("Redemption failed: " + err);
+    } finally {
+        redeemBtn.disabled = false;
+        redeemBtn.textContent = `Redeem 1000 Coins (₹10)`;
+    }
+});
+// ===================================================================
+// INITIAL LOAD
+// ===================================================================
+loadTournaments();
+</script>
+</body>
+</html>
